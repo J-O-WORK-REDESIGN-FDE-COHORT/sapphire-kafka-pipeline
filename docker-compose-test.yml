@@ -1,0 +1,94 @@
+# docker-compose-test.yml
+# Purpose: Minimal integration-test environment for the sapphire-kafka-pipeline.
+#          Provides Kafka, Confluent Schema Registry, and PostgreSQL with the
+#          TimescaleDB extension — the three infrastructure components needed
+#          to validate the temperature pipeline end-to-end.
+#
+# Usage:
+#   docker compose -f docker-compose-test.yml up -d
+#   # Run integration tests …
+#   docker compose -f docker-compose-test.yml down -v
+#
+# Analysis F-7: This file was introduced to satisfy the test-environment
+# requirement identified in the implementation analysis.
+
+version: "3.8"
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Kafka broker (single-node, KRaft mode — no ZooKeeper dependency)
+  # ---------------------------------------------------------------------------
+  kafka:
+    image: bitnami/kafka:3.7
+    container_name: sapphire-test-kafka
+    environment:
+      # KRaft configuration — no ZooKeeper required
+      KAFKA_CFG_NODE_ID: "1"
+      KAFKA_CFG_PROCESS_ROLES: "broker,controller"
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_CFG_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093"
+      KAFKA_CFG_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092"
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: "PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT"
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      # Automatically create the temperature-events topic on first publish
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+    ports:
+      - "9092:9092"
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Confluent Schema Registry
+  # ---------------------------------------------------------------------------
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.6.1
+    container_name: sapphire-test-schema-registry
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:9092
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+    ports:
+      - "8081:8081"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8081/subjects || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL with TimescaleDB extension
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: timescale/timescaledb:2.15.3-pg16
+    container_name: sapphire-test-postgres
+    environment:
+      POSTGRES_DB: sapphire_test
+      POSTGRES_USER: sapphire
+      POSTGRES_PASSWORD: sapphire_test_pw
+    ports:
+      - "5432:5432"
+    volumes:
+      # Apply DDL migrations in order on container initialisation.
+      - ./sql/001_create_temperature_hypertable.sql:/docker-entrypoint-initdb.d/001_create_temperature_hypertable.sql:ro
+      - ./sql/002_create_aggregation_views.sql:/docker-entrypoint-initdb.d/002_create_aggregation_views.sql:ro
+      - ./sql/003_aggregation_refresh_policy.sql:/docker-entrypoint-initdb.d/003_aggregation_refresh_policy.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sapphire -d sapphire_test"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+# All services share one network so they can refer to each other by service name.
+networks:
+  default:
+    name: sapphire-test-net

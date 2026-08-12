@@ -1,0 +1,64 @@
+{
+  "type": "record",
+  "name": "TemperatureEvent",
+  "namespace": "com.sapphire.health.temperature",
+  "doc": "Avro schema for a body temperature telemetry event published to the temperature-events Kafka topic. Compatibility: BACKWARD. All new optional fields must default to null.",
+  "fields": [
+    {
+      "name": "user_id",
+      "type": "string",
+      "doc": "Platform identifier of the user who owns this measurement."
+    },
+    {
+      "name": "value",
+      "type": "double",
+      "doc": "Numeric temperature reading as submitted by the source. Not normalised — unit field determines the scale."
+    },
+    {
+      "name": "unit",
+      "type": {
+        "type": "enum",
+        "name": "TemperatureUnit",
+        "symbols": ["CELSIUS", "FAHRENHEIT"],
+        "doc": "Unit of the submitted temperature value."
+      },
+      "doc": "Unit in which the value was measured and submitted."
+    },
+    {
+      "name": "timestamp_iso8601",
+      "type": "string",
+      "doc": "ISO 8601 timestamp with timezone offset (e.g. 2025-08-13T14:30:00+00:00) representing when the measurement was taken."
+    },
+    {
+      "name": "device_source",
+      "type": "string",
+      "doc": "Identifier of the device or API source that submitted the reading. Stored as-is; not validated against a device registry at ingestion time."
+    },
+    {
+      "name": "ingestion_source",
+      "type": {
+        "type": "enum",
+        "name": "IngestionSource",
+        "symbols": ["DEVICE_PUSH", "API"],
+        "doc": "How the event arrived at the platform — directly from a device or via an integrated API."
+      },
+      "doc": "Channel through which this temperature event was ingested."
+    },
+    {
+      "name": "measurement_method",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Optional measurement method (e.g. oral, axillary, tympanic). Absence does not block ingestion or processing."
+    },
+    {
+      "name": "created_at",
+      "type": "string",
+      "doc": "ISO 8601 timestamp with timezone offset representing when this event record was created by the ingestion service."
+    },
+    {
+      "name": "dedup_hash",
+      "type": "string",
+      "doc": "SHA-256 hex digest of (user_id + device_source + timestamp_iso8601 + value). Used as the unique idempotency key in the PostgreSQL sink to prevent duplicate records."
+    }
+  ]
+}
