@@ -1,0 +1,40 @@
+{
+  "name": "postgres-sink-config-temperature",
+  "config": {
+    "connector.class": "io.confluent.connect.jdbc.JdbcSinkConnector",
+    "tasks.max": "1",
+
+    "topics": "temperature-events",
+
+    "connection.url": "jdbc:postgresql://shared-postgres:5432/sapphire",
+    "connection.user": "admin",
+    "connection.password": "admin123",
+
+    "auto.create": "false",
+    "auto.evolve": "false",
+
+    "insert.mode": "insert",
+    "pk.mode": "record_value",
+    "pk.fields": "dedup_hash",
+
+    "table.name.format": "temperature_metrics",
+
+    "fields.whitelist": "user_id,value,unit,recorded_at,device_source,ingestion_source,measurement_method,created_at,dedup_hash",
+
+    "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+    "value.converter": "io.confluent.connect.avro.AvroConverter",
+    "value.converter.schema.registry.url": "http://schema-registry:8081",
+
+    "transforms": "RenameTimestamp",
+
+    "transforms.RenameTimestamp.type": "org.apache.kafka.connect.transforms.ReplaceField$Value",
+    "transforms.RenameTimestamp.renames": "timestamp_iso8601:recorded_at",
+
+    "errors.tolerance": "all",
+    "errors.log.enable": "true",
+    "errors.log.include.messages": "true",
+    "errors.deadletterqueue.topic.name": "dlq-postgres-sink-temperature",
+    "errors.deadletterqueue.topic.replication.factor": "1",
+    "errors.deadletterqueue.context.headers.enable": "true"
+  }
+}
