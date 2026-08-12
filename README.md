@@ -56,6 +56,47 @@ Schema file: [`schemas/temperature-event-schema.avro`](schemas/temperature-event
 
 Schema compatibility is set to **BACKWARD** — all future optional fields must default to `null`.
 
+### Schema Registry Compatibility Verification (T044)
+
+The schema is registered under subject `temperature-events-value` with compatibility level **BACKWARD**.
+
+Backwards compatibility means:
+- Existing consumers can deserialize records written by a new producer (new optional fields default to `null`).
+- No required field may be removed and no enum symbol may be removed in subsequent schema versions.
+- No existing schema on any other topic was modified — this is a purely additive registration.
+
+**Pre-deploy check** (run against your Schema Registry before deploying the connector):
+
+```bash
+# Register the schema for the first time
+curl -X POST \
+  -H "Content-Type: application/vnd.schemaregistry.v1+json" \
+  --data "{\"schema\": $(cat schemas/temperature-event-schema.avro | jq -Rs .), \"schemaType\": \"AVRO\"}" \
+  http://localhost:8081/subjects/temperature-events-value/versions
+# Expected response: {"id": <schema-id>}
+
+# Verify BACKWARD compatibility is set
+curl http://localhost:8081/config/temperature-events-value
+# Expected: {"compatibilityLevel":"BACKWARD"}
+
+# If the schema has already been registered, test compatibility of a proposed new version:
+curl -X POST \
+  -H "Content-Type: application/vnd.schemaregistry.v1+json" \
+  --data "{\"schema\": $(cat schemas/temperature-event-schema.avro | jq -Rs .), \"schemaType\": \"AVRO\"}" \
+  http://localhost:8081/compatibility/subjects/temperature-events-value/versions/latest
+# Expected: {"is_compatible":true}
+```
+
+**Set BACKWARD compatibility on the subject** (one-time, before first schema registration):
+
+```bash
+curl -X PUT \
+  -H "Content-Type: application/vnd.schemaregistry.v1+json" \
+  --data '{"compatibility": "BACKWARD"}' \
+  http://localhost:8081/config/temperature-events-value
+# Expected: {"compatibility":"BACKWARD"}
+```
+
 ### Kafka Topic
 
 | Property | Value |
